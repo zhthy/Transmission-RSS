@@ -90,13 +90,15 @@ def get_user_input():
 
 def add_torrent(url, client):
     """
-    将种子链接添加到Transmission中。
+    将种子链接添加到Transmission中，并返回种子ID。
     """
     try:
-        client.add_torrent(url)
+        torrent = client.add_torrent(url)
         log_message(f'Added torrent: {url}')
+        return torrent.id
     except Exception as e:
         log_message(f'Failed to add torrent: {url}, Error: {e}')
+        return None
 
 def get_current_seeding_size(client):
     """
@@ -107,6 +109,22 @@ def get_current_seeding_size(client):
         if torrent.status in ['seeding', 'downloading']:
             total_space_used += torrent.have_valid / (1024 ** 3)  # 转换为GB
     return total_space_used
+
+def wait_for_downloads_to_complete(client):
+    """
+    等待所有下载完成。
+    """
+    while True:
+        all_complete = True
+        for torrent in client.get_torrents():
+            if torrent.status == 'downloading':
+                all_complete = False
+                break
+        if all_complete:
+            log_message("所有下载已完成。")
+            return
+        log_message("等待下载完成...")
+        time.sleep(60)  # 每1分钟检查一次
 
 def check_feeds(max_size_gb, filter_keywords, max_seeding_size_gb, added_torrents):
     """
@@ -122,6 +140,7 @@ def check_feeds(max_size_gb, filter_keywords, max_seeding_size_gb, added_torrent
 
         for feed_url in RSS_FEEDS:
             feed = feedparser.parse(feed_url)
+            log_message(f'Checking feed: {feed_url} with {len(feed.entries)} entries')
             for entry in feed.entries:
                 # 提取 enclosure URL
                 enclosure_url = None
@@ -134,24 +153,27 @@ def check_feeds(max_size_gb, filter_keywords, max_seeding_size_gb, added_torrent
                 if enclosure_url:
                     torrent_link = enclosure_url
                     torrent_title = entry.title
-                    torrent_size = entry.get('torrent_contentlength', 0) / (1024 ** 3)  # 获取种子大小并转换为GB
 
                     # 检查种子标题是否包含任何过滤关键字
                     if any(keyword.lower() in torrent_title.lower() for keyword in filter_keywords):
                         # 检查种子大小是否符合要求
-                        if max_size_gb == 0 or torrent_size <= max_size_gb:
-                            if torrent_link not in added_torrents:
-                                current_seeding_size = get_current_seeding_size(client)
-                                if current_seeding_size + torrent_size <= max_seeding_size_gb:
-                                    add_torrent(torrent_link, client)
-                                    added_torrents.add(torrent_link)
-                                    save_added_torrent(ADDED_TORRENTS_FILE, torrent_link)
-                                    current_seeding_size = get_current_seeding_size(client)
-                                    log_message(f"当前Transmission占用空间: {current_seeding_size:.2f} GB, 添加种子体积: {torrent_size:.2f} GB, 总体积: {current_seeding_size + torrent_size:.2f} GB")
-                                    time.sleep(15)  # 等待15s
-                                else:
-                                    log_message(f"当前Transmission占用空间: {current_seeding_size:.2f} GB, 添加种子体积: {torrent_size:.2f} GB, 超过最大做种体积: {max_seeding_size_gb:.2f} GB。停止添加新种子。")
-                                    return
+                        if torrent_link not in added_torrents:
+                            current_seeding_size = get_current_seeding_size(client)
+                            torrent_id = add_torrent(torrent_link, client)
+                            if torrent_id:
+                                torrent = client.get_torrent(torrent_id)
+                                torrent_size = torrent.total_size / (1024 ** 3)  # 转换为GB
+
+                                if max_size_gb == 0 or torrent_size <= max_size_gb:
+                                    if current_seeding_size + torrent_size <= max_seeding_size_gb:
+                                        added_torrents.add(torrent_link)
+                                        save_added_torrent(ADDED_TORRENTS_FILE, torrent_link)
+                                        current_seeding_size = get_current_seeding_size(client)
+                                        log_message(f"种子标题: {torrent_title}, 当前Transmission占用空间: {current_seeding_size:.2f} GB, 添加种子体积: {torrent_size:.2f} GB, 总体积: {current_seeding_size + torrent_size:.2f} GB")
+                                        wait_for_downloads_to_complete(client)  # 等待所有下载完成
+                                    else:
+                                        log_message(f"种子标题: {torrent_title}, 当前Transmission占用空间: {current_seeding_size:.2f} GB, 添加种子体积: {torrent_size:.2f} GB, 超过最大做种体积: {max_seeding_size_gb:.2f} GB。停止添加新种子。")
+                                        return
     except Exception as e:
         log_message(f'Failed to check feeds: {e}')
 
