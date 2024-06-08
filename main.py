@@ -148,7 +148,7 @@ def check_feeds(max_size_gb, filter_keywords, max_seeding_size_gb, added_torrent
                                     save_added_torrent(ADDED_TORRENTS_FILE, torrent_link)
                                     current_seeding_size = get_current_seeding_size(client)
                                     log_message(f"当前Transmission占用空间: {current_seeding_size:.2f} GB, 添加种子体积: {torrent_size:.2f} GB, 总体积: {current_seeding_size + torrent_size:.2f} GB")
-                                    time.sleep(600)  # 等待10分钟
+                                    time.sleep(15)  # 等待15s
                                 else:
                                     log_message(f"当前Transmission占用空间: {current_seeding_size:.2f} GB, 添加种子体积: {torrent_size:.2f} GB, 超过最大做种体积: {max_seeding_size_gb:.2f} GB。停止添加新种子。")
                                     return
