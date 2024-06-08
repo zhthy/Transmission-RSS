@@ -36,4 +36,4 @@ sudo nohup python3 main.py &
 
 # 已测试的站点
 
-FSM、CarPT（选结尾带linktype的RSS链接）
+FSM
