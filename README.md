@@ -26,7 +26,7 @@ RSS_FEEDS = [
 ]
 ```
 
-#后台运行
+#后台运行(一定要前台运行一次，再后台)
 
 ```sh
 sudo nohup python3 main.py &
